@@ -1,0 +1,4 @@
+../Middlewares/Third_Party/LwOW/lwow_ll_stm32_hal.c:69:1:init	2
+../Middlewares/Third_Party/LwOW/lwow_ll_stm32_hal.c:80:1:deinit	2
+../Middlewares/Third_Party/LwOW/lwow_ll_stm32_hal.c:89:1:set_baudrate	2
+../Middlewares/Third_Party/LwOW/lwow_ll_stm32_hal.c:99:1:transmit_receive	4

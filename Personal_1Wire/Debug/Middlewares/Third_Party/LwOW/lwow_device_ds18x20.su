@@ -1,0 +1,17 @@
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:51:1:lwow_ds18x20_start_raw	24	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:68:1:lwow_ds18x20_start	24	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:87:1:lwow_ds18x20_read_raw	56	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:145:1:lwow_ds18x20_read	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:168:1:lwow_ds18x20_get_resolution_raw	24	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:196:1:lwow_ds18x20_get_resolution	24	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:218:1:lwow_ds18x20_set_resolution_raw	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:269:1:lwow_ds18x20_set_resolution	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:309:1:lwow_ds18x20_set_alarm_temp_raw	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:377:1:lwow_ds18x20_set_alarm_temp	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:399:1:lwow_ds18x20_get_alarm_temp_raw	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:433:1:lwow_ds18x20_get_alarm_temp	32	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:454:1:lwow_ds18x20_search_alarm_raw	16	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:463:1:lwow_ds18x20_search_alarm	24	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:482:1:lwow_ds18x20_is_b	16	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:498:1:lwow_ds18x20_is_s	16	static
+../Middlewares/Third_Party/LwOW/lwow_device_ds18x20.c:514:1:lwow_ds18x20_get_temp_conversion_time	16	static
