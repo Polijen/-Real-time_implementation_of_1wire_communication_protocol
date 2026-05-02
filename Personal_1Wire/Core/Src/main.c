@@ -136,7 +136,6 @@ int main(void)
   MX_I2S3_Init();
   MX_SPI1_Init();
   MX_USART3_UART_Init();
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
   //lwow_t ow_handle;          // structura centrala de gestionare a magistralei
 
@@ -520,19 +519,43 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* Rutina apelată de subsistemul abstract de operare HAL pe fond de hardware cand fluxul de la memorie spre periferic a atins numărătoarea zerotronică (0) */
+
+/* Required external linkage declarations in main.c */
+/*
+extern void lwow_ll_usart_tx_isr(UART_HandleTypeDef *huart);
+extern void lwow_ll_usart_rx_isr(UART_HandleTypeDef *huart);
+*/
+/* Implementation of the HAL callbacks */
+/*
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART3) {
-        // CMSIS eliberează semaforul în siguranță chiar și din întrerupere
-        osSemaphoreRelease(smphrHandle);
+    if (huart->Instance == USART3) { // Ensure the callback targets the correct peripheral
+        lwow_ll_usart_tx_isr(huart);
     }
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART3) {
-        osSemaphoreRelease(smphrHandle);
+        lwow_ll_usart_rx_isr(huart);
+    }
+}
+*/
+/*
+// Aceste funcții sunt apelate automat de HAL când DMA-ul își termină treaba
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART3) {
+        // Apelează funcția de notificare TX din LwOW LL (verifică denumirea exactă în lwow_ll_stm32_hal.c)
+        // Exemplu generic (depinde de versiunea LwOW folosită):
+        lwow_ll_usart_tx_isr(huart);
     }
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART3) {
+        // Apelează funcția de notificare RX din LwOW LL
+        lwow_ll_usart_rx_isr(huart);
+    }
+}
+*/
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -547,6 +570,137 @@ void StartDefaultTask(void *argument)
   /* init code for USB_DEVICE */
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
+
+  lwow_rom_t target_sensor;
+  /* Buffer for formatting Virtual COM port transmissions */
+     char transmission_buffer[90];
+     osDelay(pdMS_TO_TICKS(3000));
+     /* 1. Hardware Driver Initialization - Correctly passing driver by reference */
+     while (lwow_init(&ow_handle, &lwow_ll_drv_stm32_hal, &huart3)!= lwowOK) {
+             char *err_init = "Fatal: LwOW UART Initialization Failed. Retrying...\r\n";
+             while (CDC_Transmit_FS((uint8_t*)err_init, strlen(err_init)) == USBD_BUSY) {
+                 osDelay(pdMS_TO_TICKS(1));
+             }
+             osDelay(pdMS_TO_TICKS(1000)); /* Retry every 1 second instead of suspending */
+     }
+
+     /* 2. Topology Discovery - Utilizing the modernized stateful search API */
+     lwow_search_reset(&ow_handle);
+         while (lwow_search(&ow_handle, &target_sensor)!= lwowOK) {
+             char *err_search = "Error: No DS18B20 Detected. Check wiring/pull-up. Retrying...\r\n";
+             while (CDC_Transmit_FS((uint8_t*)err_search, strlen(err_search)) == USBD_BUSY) {
+                 osDelay(pdMS_TO_TICKS(1));
+             }
+             osDelay(pdMS_TO_TICKS(1000)); /* Retry every 1 second instead of suspending */
+             lwow_search_reset(&ow_handle);
+         }
+     //t<rget sensor found
+     char *msg_found = "Success: DS18B20 Detected! Starting telemetry...\r\n";
+             while (CDC_Transmit_FS((uint8_t*)msg_found, strlen(msg_found)) == USBD_BUSY) {
+                 osDelay(pdMS_TO_TICKS(1));
+             }
+
+     /* 3. Thread Telemetry Variables */
+     float current_temp = 0;
+     uint32_t iteration_counter = 0;
+
+     /* 4. Deterministic, Non-Blocking Operational Loop */
+     for(;;)
+         {
+             /* Broadcast the Convert T Command to the sensor network */
+             if (lwow_ds18x20_start(&ow_handle, NULL) == 1) {
+
+                 /* Yield the execution context for the duration of the ADC processing (750ms) */
+                 osDelay(pdMS_TO_TICKS(750));
+
+                 /* Secure thread-safe retrieval of the converted memory scratchpad */
+                 if (lwow_ds18x20_read(&ow_handle, &target_sensor, &current_temp) == 1) {
+
+                     iteration_counter++;
+
+                     /* Serialize output including iteration counter */
+                     int len = snprintf(transmission_buffer, sizeof(transmission_buffer),
+                                        "[%lu] DS18B20 Temperature: %.2f C\r\n",
+                                        iteration_counter, current_temp);
+
+                     /* Dispatch the USB CDC data transfer safely handling USBD_BUSY */
+                     while (CDC_Transmit_FS((uint8_t*)transmission_buffer, len) == USBD_BUSY) {
+                         osDelay(pdMS_TO_TICKS(1));
+                     }
+
+                 } else {
+                     char *err_read = "Warning: DS18B20 Read Failure or CRC Mismatch.\r\n";
+                     while (CDC_Transmit_FS((uint8_t*)err_read, strlen(err_read)) == USBD_BUSY) {
+                         osDelay(pdMS_TO_TICKS(1));
+                     }
+                 }
+             } else {
+                 /* Conversion start command failed; attempt a short recovery delay */
+                 osDelay(pdMS_TO_TICKS(100));
+             }
+
+             /* Regulate the overall sampling rate loop */
+             osDelay(pdMS_TO_TICKS(250));
+         }
+
+
+  /*
+  // Instanțiem structurile de bază pentru 1-Wire
+    lwow_t ow;
+    lwow_rom_t rom_id; // Adresa unică pe 64-biți a senzorului
+    lwow_rom_t target_rom_id;
+    uint8_t devices_found = 0;
+    float temperature = 0.0f;
+
+    // 1. Inițializăm biblioteca LwOW (îi pasăm structura și un pointer către driver-ul low-level)
+    // Parametrii pot varia ușor în funcție de versiunea LwOW instalată
+    //lwow_init(&ow, lwow_ll_drv_stm32_hal, &huart3);
+    if (lwow_init(&ow, &lwow_ll_drv_stm32_hal, &huart3)!= lwowOK) {
+        // Implement robust fault handling for initialization failure
+    }
+    lwow_search_reset(&ow);
+    // 2. Căutăm primul senzor de pe magistrală
+    // Dacă returnează 1, a găsit cu succes un senzor și i-a salvat adresa în `rom_id`
+    if (lwow_search(&ow, &target_rom_id) == lwowOK){
+        devices_found = 1;
+        vPrintSerial("Senzor DS18B20 gasit!\r\n");
+    } else {
+        vPrintSerial("Eroare: Niciun senzor detectat. Verifica rezistenta de pull-up!\r\n");
+    }
+
+    uint32_t cnt = 0;
+
+    // Infinite loop
+    for(;;)
+    {
+      cnt++;
+
+      if (devices_found) {
+          // 3. Trimitem comanda către senzor să înceapă conversia temperaturii
+          // Transmisia se face complet în background via DMA
+          if (lwow_ds18x20_start(&ow, &rom_id) == 1) {
+
+              osDelay(750);
+          	  // 4. Așteptăm ca DS18B20 să termine măsurătoarea (Max 750 ms pt 12-bit)
+          	  // Aici CPU-ul se duce să rezolve alte task-uri (ex: animații ecran, pachete rețea)
+
+              // 5. Citim valoarea (Datele vin din senzor tot via DMA)
+              if (lwow_ds18x20_read(&ow, &rom_id, &temperature) == 1) {
+                  vPrintSerial("Iteratia: %lu | Temp: %.2f C\r\n", cnt, temperature);
+              } else {
+                  vPrintSerial("Eroare la citirea memoriei Scratchpad!\r\n");
+              }
+          } else {
+              vPrintSerial("Senzorul nu a raspuns la comanda de conversie.\r\n");
+          }
+      } else {
+          vPrintSerial("Iteratia: %lu | Astept conectarea senzorului...\r\n", cnt);
+      }
+
+      // Delay general al buclei pentru cadență (ex. 1 citire la fiecare ~2 secunde)
+      osDelay(1000);
+    }
+
   uint32_t cnt = 0;
   float temperatura_celsius = 0;
   char buffer_mesaj[64]; // Am adăugat  pentru a aloca memorie pentru un text lung
@@ -564,12 +718,11 @@ void StartDefaultTask(void *argument)
 
           }
       }
-      osDelay(1000);
+      osDelay(1000);*/
 
 
-  }
+
   /* USER CODE END 5 */
-
 }
 
 /**
